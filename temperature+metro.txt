@@ -1,0 +1,49 @@
+#include <MeMCore.h>
+
+// Initialize temperature sensor
+MeTemperature temperatureSensor(PORT_1); // Assume the temperature sensor is connected to PORT_1
+MePort port(PORT_1);
+Servo myservo1;  // Create a servo object to control the servo
+
+int16_t servo1pin = port.pin1(); // Connect the servo to SLOT1 of PORT_1
+
+unsigned long startTime;  // Record the start time of the program
+
+void setup() {
+  // Initialize serial communication
+  Serial.begin(9600);
+
+  // Initialize the servo
+  myservo1.attach(servo1pin);  // Connect the servo to servo1pin
+
+  // Record the start time of the program
+  startTime = millis();
+}
+
+void loop() {
+  // Get the current time
+  unsigned long currentTime = millis();
+  
+  // Stop if the program has been running for more than 10 seconds
+  if (currentTime - startTime > 10000) {
+    // Stop program execution
+    return;
+  }
+
+  // Read the temperature value
+  float temperature = temperatureSensor.temperature();
+
+  // Output the temperature value
+  Serial.print("Temperature: ");
+  Serial.print(temperature);
+  Serial.println(" C");
+
+  // Control the servo and output the angle value
+  myservo1.write(0);      // Set the servo to 0 degrees
+  Serial.println("Servo 1 Angle: 0 degrees");
+  delay(2000);            // Wait for 2 seconds
+
+  myservo1.write(45);    // Set the servo to 45 degrees
+  Serial.println("Servo 1 Angle: 45 degrees");
+  delay(2000);            // Wait for 2 seconds
+}

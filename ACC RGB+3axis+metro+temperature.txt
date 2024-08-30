@@ -1,0 +1,175 @@
+// When the distance is greater than 30 cm, set to maxSpeed. RGB Green
+// When the distance is between 20 cm and 30 cm, set to baseSpeed. RGB Blue
+// When the distance is between 10 cm and 20 cm, set to minSpeed. RGB Yellow
+// When the distance is less than 10 cm, set to 0. RGB Red. Control the servo motor
+// When going uphill, if the obstacle in front is more than 32 cm away, drive at maxSpeed;
+// if the obstacle is between 20 cm and 30 cm, drive at baseSpeed;
+// if the obstacle is within 20 cm, drive at baseSpeed;
+// if the obstacle is less than 10 cm, stop.
+// When going downhill, if the obstacle in front is more than 30 cm away, drive at baseSpeed;
+// if the obstacle is within 30 cm, drive at minSpeed;
+// if the obstacle is less than 10 cm, stop.
+
+#include <Wire.h>
+#include <MeMCore.h>
+
+// Distance thresholds
+const int maxDistance = 30; // 30 cm
+const int targetDistance = 20; // 20 cm
+const int stopDistance = 10; // 10 cm
+
+// Motor speeds
+const int maxSpeed = 255; // Maximum speed
+const int baseSpeed = 150; // Base speed
+const int minSpeed = 80; // Minimum speed
+
+int currentSpeedLeft = baseSpeed;
+int currentSpeedRight = baseSpeed;
+
+// Gyroscope sensor
+MeGyro gyro(PORT_4); // Using the actual I2C address
+
+// Ultrasonic sensor
+MeUltrasonicSensor ultraSensor(PORT_3);
+MeDCMotor motorLeft(M1);
+MeDCMotor motorRight(M2);
+
+// RGB LED
+MeRGBLed led(PORT_1, 4); // Initialize RGB LED with 4 LEDs
+
+// Temperature sensor and servo
+MeTemperature temperatureSensor(PORT_2); // Assuming the temperature sensor is connected to PORT_2 (A0)
+MePort port(PORT_2);
+Servo myservo1;  // Create a servo object to control the servo
+
+int16_t servo1pin = port.pin1(); // Connect the servo to SLOT1 on PORT_2
+
+// Run time limit
+const long runTime = 10000; // 10 seconds = 10000 milliseconds
+long startTime;
+
+void setLEDColor(uint8_t red, uint8_t green, uint8_t blue) {
+  for(uint8_t t = 0; t < 4; t++) { // Loop through 4 LEDs
+    led.setColorAt(t, red, green, blue); // Set color for each LED
+  }
+  led.show();
+}
+
+void setup() {
+  Serial.begin(9600);
+  Wire.begin();
+
+  // Initialize the gyroscope sensor
+  gyro.begin();
+  delay(2000); // Wait for the gyroscope to stabilize
+
+  // Initialize the LED
+  led.show();
+
+  // Initialize the servo
+  myservo1.attach(servo1pin);  // Connect the servo to servo1pin
+
+  // Record the start time
+  startTime = millis();
+}
+
+void loop() {
+  // Get the current time
+  unsigned long currentTime = millis();
+
+  // Update gyroscope data
+  gyro.update();
+  float pitch = gyro.getAngleY();
+  float roll = gyro.getAngleZ();
+
+  // Read the ultrasonic sensor distance
+  long distance = ultraSensor.distanceCm();
+
+  // Read the temperature value
+  float temperature = temperatureSensor.temperature();
+
+  // Set initial speed to base speed
+  int speedLeft = baseSpeed;
+  int speedRight = baseSpeed;
+
+  // Adjust speed and LED color based on distance
+  if (distance < stopDistance) {
+    // Distance less than 10 cm, stop
+    speedLeft = 0;
+    speedRight = 0;
+    setLEDColor(255, 0, 0); // Red
+    // Control the servo and output angle values
+    myservo1.write(0);      // Set servo 1 position to 0 degrees
+    Serial.println("Servo 1 Angle: 0 degrees");
+    delay(2000);            // Wait for 2 seconds
+    myservo1.write(45);    // Set servo 1 position to 45 degrees
+    Serial.println("Servo 1 Angle: 45 degrees");
+    delay(2000);            // Wait for 2 seconds
+  } else if (distance <= targetDistance) {
+    // Distance between 10 cm and 20 cm, slow down
+    speedLeft = minSpeed;
+    speedRight = minSpeed;
+    setLEDColor(255, 255, 0); // Yellow
+  } else if (distance <= maxDistance) {
+    // Distance between 20 cm and 30 cm, base speed
+    speedLeft = baseSpeed;
+    speedRight = baseSpeed;
+    setLEDColor(0, 0, 255); // Blue
+  } else {
+    // Distance greater than 30 cm, speed up
+    speedLeft = maxSpeed;
+    speedRight = maxSpeed;
+    setLEDColor(0, 255, 0); // Green
+  }
+
+  // Adjust speed based on gyroscope sensor data
+  if (pitch > 5 || roll > 5) {
+    // Going uphill
+    if (distance < stopDistance) {
+      speedLeft = 0;
+      speedRight = 0;
+    } else if (distance <= targetDistance) {
+      speedLeft = baseSpeed;
+      speedRight = baseSpeed;
+    } else if (distance <= maxDistance) {
+      speedLeft = baseSpeed;
+      speedRight = baseSpeed;
+    } else {
+      speedLeft = maxSpeed;
+      speedRight = maxSpeed;
+    }
+  } else if (pitch < -5 || roll < -5) {
+    // Going downhill
+    if (distance < stopDistance) {
+      speedLeft = 0;
+      speedRight = 0;
+    } else if (distance <= maxDistance) {
+      speedLeft = minSpeed;
+      speedRight = minSpeed;
+    } else {
+      speedLeft = baseSpeed;
+      speedRight = baseSpeed;
+    }
+  }
+
+  // Set motor speeds
+  motorLeft.run(-speedLeft); // Reverse M1 motor speed
+  motorRight.run(speedRight); // Keep M2 motor speed
+
+  // Print debug information
+  Serial.print("Distance: ");
+  Serial.print(distance);
+  Serial.print(" cm, Speed L: ");
+  Serial.print(speedLeft);
+  Serial.print(", Speed R: ");
+  Serial.print(speedRight);
+  Serial.print(", Pitch: ");
+  Serial.print(pitch);
+  Serial.print(", Roll: ");
+  Serial.print(roll);
+  Serial.print(", Temperature: ");
+  Serial.print(temperature);
+  Serial.println(" C");
+
+  delay(100); // Delay 100 milliseconds
+}

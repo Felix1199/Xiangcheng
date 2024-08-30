@@ -1,0 +1,122 @@
+// When the temperature is below 25 degrees, the RGB LED lights up green.
+// When the temperature is between 25 and 30 degrees, the RGB LED lights up blue.
+// When the temperature is above 30 degrees, the RGB LED lights up red.
+
+// ACC
+
+#include <Wire.h>
+#include <MeMCore.h>
+
+// Distance thresholds
+const int maxDistance = 30; // 30 cm
+const int targetDistance = 20; // 20 cm
+const int stopDistance = 10; // 10 cm
+
+// Motor speeds
+const int maxSpeed = 255; // Maximum speed
+const int baseSpeed = 180; // Base speed
+const int minSpeed = 120; // Minimum speed
+
+int currentSpeedLeft = baseSpeed;
+int currentSpeedRight = baseSpeed;
+
+// Ultrasonic sensor
+MeUltrasonicSensor ultraSensor(PORT_3);
+MeDCMotor motorLeft(M1);
+MeDCMotor motorRight(M2);
+
+// Initialize temperature sensor
+MeTemperature temperatureSensor(PORT_1); // Assume the temperature sensor is connected to PORT_1 (A0)
+MePort port(PORT_2);
+Servo myservo1;  // Create a servo object to control the servo
+
+// RGB LED lights
+MeRGBLed led(PORT_2, 4); // Initialize RGB LED lights, specifying the number as 4
+
+int16_t servo1pin = port.pin1(); // Connect the servo to SLOT1 of PORT_2
+
+void setLEDColor(uint8_t red, uint8_t green, uint8_t blue) {
+  for (uint8_t t = 0; t < 4; t++) { // Iterate through 4 LED lights
+    led.setColorAt(t, red, green, blue); // Set the color of each LED light
+  }
+  led.show();
+}
+
+void setup() {
+  Serial.begin(9600);
+  Wire.begin();
+
+  // Initialize the servo
+  myservo1.attach(servo1pin);  // Connect the servo to servo1pin
+
+  // Initialize LED lights
+  led.show();
+}
+
+void loop() {
+  // Read the ultrasonic sensor distance
+  long distance = ultraSensor.distanceCm();
+
+  // Read the temperature value
+  float temperature = temperatureSensor.temperature();
+
+  // Set initial speed to base speed
+  int speedLeft = baseSpeed;
+  int speedRight = baseSpeed;
+
+  // Adjust speed based on distance
+  if (distance < stopDistance) {
+    // Distance less than 10 cm, stop
+    speedLeft = 0;
+    speedRight = 0;
+  } else if (distance <= targetDistance) {
+    // Distance between 10 cm and 20 cm, slow down
+    speedLeft = minSpeed;
+    speedRight = minSpeed;
+  } else if (distance <= maxDistance) {
+    // Distance between 20 cm and 30 cm, base speed
+    speedLeft = baseSpeed;
+    speedRight = baseSpeed;
+  } else {
+    // Distance greater than 30 cm, speed up
+    speedLeft = maxSpeed;
+    speedRight = maxSpeed;
+  }
+
+  // Set motor speeds
+  motorLeft.run(-speedLeft); // Reverse M1 motor speed
+  motorRight.run(speedRight); // Maintain M2 motor speed
+
+  // Control the servo for different distances
+  if (distance < 10) {
+    myservo1.write(0);      // Rotate counterclockwise to 0 degrees
+  } else if (distance > 20) {
+    myservo1.write(180);    // Rotate clockwise to 180 degrees
+  } else {
+    myservo1.write(90);     // Normal position
+  }
+
+  // Set LED light color based on temperature
+  if (temperature < 25.0) {
+    setLEDColor(0, 255, 0); // Green
+  } else if (temperature >= 25.0 && temperature <= 30.0) {
+    setLEDColor(0, 0, 255); // Blue
+  } else {
+    setLEDColor(255, 0, 0); // Red
+  }
+
+  // Print debug information
+  Serial.print("Distance: ");
+  Serial.print(distance);
+  Serial.print(" cm, Speed L: ");
+  Serial.print(speedLeft);
+  Serial.print(", Speed R: ");
+  Serial.print(speedRight);
+  Serial.print(", Temperature: ");
+  Serial.print(temperature);
+  Serial.println(" C");
+
+  delay(100); // Delay 100 milliseconds
+}
+
+}

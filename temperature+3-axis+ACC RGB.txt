@@ -1,0 +1,150 @@
+#include <Wire.h>
+#include <MeMCore.h>
+
+// Distance thresholds
+const int maxDistance = 20; // 20 cm
+const int targetDistance = 10; // 10 cm
+const int stopDistance = 5; // 5 cm
+
+// Motor speeds
+const int maxSpeed = 255; // Maximum speed
+const int baseSpeed = 150; // Base speed
+const int minSpeed = 80; // Minimum speed
+
+int currentSpeedLeft = baseSpeed;
+int currentSpeedRight = baseSpeed;
+
+// Gyroscope sensor
+MeGyro gyro(PORT_4); // Use the actual I2C address
+
+// Ultrasonic sensor
+MeUltrasonicSensor ultraSensor(PORT_1);
+MeDCMotor motorLeft(M1);
+MeDCMotor motorRight(M2);
+
+// Initialize temperature sensor
+MeTemperature temperatureSensor(PORT_3); // Assume the temperature sensor is connected to PORT_3
+
+// RGB LED
+MeRGBLed led(PORT_1, 4); // Initialize RGB LED with 4 LEDs
+
+// Run time limit
+const long runTime = 10000; // 10 seconds = 10000 milliseconds
+long startTime;
+
+void setLEDColor(uint8_t red, uint8_t green, uint8_t blue) {
+  for (uint8_t t = 0; t < 4; t++) { // Iterate through 4 LEDs
+    led.setColorAt(t, red, green, blue); // Set the color of each LED
+  }
+  led.show();
+}
+
+void setup() {
+  Serial.begin(9600);
+  Wire.begin();
+
+  // Initialize gyroscope sensor
+  gyro.begin();
+  delay(2000); // Wait for the gyroscope to stabilize
+
+  // Initialize LED
+  led.show();
+
+  // Record the start time
+  startTime = millis();
+}
+
+void loop() {
+  // Get the current time
+  unsigned long currentTime = millis();
+  
+  // Check if the run time has exceeded
+  if (currentTime - startTime >= runTime) {
+    // Stop the motors
+    motorLeft.run(0);
+    motorRight.run(0);
+    Serial.println("Program ended");
+    while (true); // Stop here
+  }
+
+  // Update gyroscope data
+  gyro.update();
+  float pitch = gyro.getAngleX();
+  float roll = gyro.getAngleY();
+  float yaw = gyro.getAngleZ();
+
+  // Read distance from ultrasonic sensor
+  long distance = ultraSensor.distanceCm();
+
+  // Read temperature value
+  float temperature = temperatureSensor.temperature();
+
+  // Check if the temperature is above 30 degrees Celsius
+  if (temperature > 30.0) {
+    setLEDColor(255, 0, 0); // Red
+    motorLeft.run(0);
+    motorRight.run(0);
+    Serial.println("Temperature too high, stopping operation");
+    while (true); // Stop here
+  }
+
+  // Check if the gyroscope angle exceeds 45 degrees
+  if (abs(pitch) > 45 || abs(roll) > 45 || abs(yaw) > 45) {
+    setLEDColor(255, 0, 0); // Red
+    motorLeft.run(0);
+    motorRight.run(0);
+    Serial.println("Angle too high, stopping operation");
+    while (true); // Stop here
+  }
+
+  // Set initial speed to base speed
+  int speedLeft = baseSpeed;
+  int speedRight = baseSpeed;
+
+  // Adjust speed and LED color based on distance
+  if (distance < stopDistance) {
+    // Distance less than 5 cm, stop
+    speedLeft = 0;
+    speedRight = 0;
+    setLEDColor(255, 0, 0); // Red
+  } else if (distance <= targetDistance) {
+    // Distance between 5 cm and 10 cm, reduce speed
+    speedLeft = minSpeed;
+    speedRight = minSpeed;
+    setLEDColor(255, 255, 0); // Yellow
+  } else if (distance <= maxDistance) {
+    // Distance between 10 cm and 20 cm, base speed
+    speedLeft = baseSpeed;
+    speedRight = baseSpeed;
+    setLEDColor(0, 0, 255); // Blue
+  } else {
+    // Distance greater than 20 cm, accelerate
+    speedLeft = maxSpeed;
+    speedRight = maxSpeed;
+    setLEDColor(0, 255, 0); // Green
+  }
+
+  // Set motor speed
+  motorLeft.run(-speedLeft); // Reverse M1 motor speed
+  motorRight.run(speedRight); // Maintain M2 motor speed
+
+  // Print debugging information
+  Serial.print("Distance: ");
+  Serial.print(distance);
+  Serial.print(" cm, Speed L: ");
+  Serial.print(speedLeft);
+  Serial.print(", Speed R: ");
+  Serial.print(speedRight);
+  Serial.print(", Pitch: ");
+  Serial.print(pitch);
+  Serial.print(", Roll: ");
+  Serial.print(roll);
+  Serial.print(", Yaw: ");
+  Serial.print(yaw);
+  Serial.print(", Temperature: ");
+  Serial.print(temperature);
+  Serial.println(" C");
+
+  delay(100); // Delay 100 milliseconds
+}
+
