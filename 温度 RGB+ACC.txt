@@ -1,0 +1,122 @@
+//当温度小于25度时，RGB LED亮绿色。
+//当温度在25-30度之间时，RGB LED亮蓝色。
+//当温度大于30度时，RGB LED亮红色。
+
+//ACC
+
+
+
+#include <Wire.h>
+#include <MeMCore.h>
+
+// 距离保持阈值
+const int maxDistance = 30; // 20 cm
+const int targetDistance = 20; // 10 cm
+const int stopDistance = 10; // 5 cm
+
+// 电机速度
+const int maxSpeed = 255; // 最大速度
+const int baseSpeed = 180; // 基础速度
+const int minSpeed = 120; // 最小速度
+
+int currentSpeedLeft = baseSpeed;
+int currentSpeedRight = baseSpeed;
+
+// 超声波传感器
+MeUltrasonicSensor ultraSensor(PORT_3);
+MeDCMotor motorLeft(M1);
+MeDCMotor motorRight(M2);
+
+// 初始化温度传感器
+MeTemperature temperatureSensor(PORT_1); // 假设温度传感器连接到PORT_1（A0）
+MePort port(PORT_2);
+Servo myservo1;  // 创建控制舵机的舵机对象
+
+// RGB LED灯
+MeRGBLed led(PORT_2, 4); // 初始化RGB LED灯，指定数量为4
+
+int16_t servo1pin = port.pin1(); // 将舵机连接到PORT_2的SLOT1
+
+void setLEDColor(uint8_t red, uint8_t green, uint8_t blue) {
+  for (uint8_t t = 0; t < 4; t++) { // 遍历4个LED灯
+    led.setColorAt(t, red, green, blue); // 设置每个LED灯的颜色
+  }
+  led.show();
+}
+
+void setup() {
+  Serial.begin(9600);
+  Wire.begin();
+
+  // 初始化舵机
+  myservo1.attach(servo1pin);  // 将舵机连接到servo1pin
+
+  // 初始化LED灯
+  led.show();
+}
+
+void loop() {
+  // 读取超声波传感器距离
+  long distance = ultraSensor.distanceCm();
+
+  // 读取温度值
+  float temperature = temperatureSensor.temperature();
+
+  // 初始速度设为基础速度
+  int speedLeft = baseSpeed;
+  int speedRight = baseSpeed;
+
+  // 根据距离调整速度
+  if (distance < stopDistance) {
+    // 距离小于5cm，停止
+    speedLeft = 0;
+    speedRight = 0;
+  } else if (distance <= targetDistance) {
+    // 距离在5cm和10cm之间，减速
+    speedLeft = minSpeed;
+    speedRight = minSpeed;
+  } else if (distance <= maxDistance) {
+    // 距离在10cm和20cm之间，基础速度
+    speedLeft = baseSpeed;
+    speedRight = baseSpeed;
+  } else {
+    // 距离大于20cm，加速
+    speedLeft = maxSpeed;
+    speedRight = maxSpeed;
+  }
+
+  // 设置电机速度
+  motorLeft.run(-speedLeft); // 反转M1电机速度
+  motorRight.run(speedRight); // 保持M2电机速度
+
+  // 控制舵机在上下坡时运动
+  if (distance < 10) {
+    myservo1.write(0);      // 逆时针转90度
+  } else if (distance > 20) {
+    myservo1.write(180);    // 顺时针转90度
+  } else {
+    myservo1.write(90);     // 正常位置
+  }
+
+  // 根据温度值设置LED灯颜色
+  if (temperature < 25.0) {
+    setLEDColor(0, 255, 0); // 绿色
+  } else if (temperature >= 25.0 && temperature <= 30.0) {
+    setLEDColor(0, 0, 255); // 蓝色
+  } else {
+    setLEDColor(255, 0, 0); // 红色
+  }
+
+  // 打印调试信息
+  Serial.print("Distance: ");
+  Serial.print(distance);
+  Serial.print(" cm, Speed L: ");
+  Serial.print(speedLeft);
+  Serial.print(", Speed R: ");
+  Serial.print(speedRight);
+  Serial.print(", Temperature: ");
+  Serial.print(temperature);
+  Serial.println(" C");
+
+  delay(100); // 延时100毫秒
+}

@@ -1,0 +1,158 @@
+//距离大于30cm时，设为maxSpeed。RGB绿色
+//距离20cm到30cm之间时，设为baseSpeed。RGB蓝色
+//距离在10cm到20cm之间时，设为minSpeed。RGB黄色
+//距离小于10cm时，设为0。RGB红色。
+//上坡时，如果前方障碍物在32cm之外，以maxSpeed行驶；如果前方障碍物在20-30cm之间，以baseSpeed行驶；如果前方障碍物在20cm以内，以baseSpeed行驶。如果前方障碍物小于10cm，停止。
+//下坡时，如果前方障碍物在30cm之外，以baseSpeed行驶；如果前方障碍物在30cm以内，以minSpeed行驶。如果前方障碍物小于10cm，停止
+
+
+#include <Wire.h>
+#include <MeMCore.h>
+
+// 距离保持阈值
+const int maxDistance = 30; // 20 cm
+const int targetDistance = 20; // 10 cm
+const int stopDistance = 10; // 5 cm
+
+// 电机速度
+const int maxSpeed = 255; // 最大速度
+const int baseSpeed = 150; // 基础速度
+const int minSpeed = 80; // 最小速度
+
+int currentSpeedLeft = baseSpeed;
+int currentSpeedRight = baseSpeed;
+
+// 陀螺仪传感器
+MeGyro gyro(PORT_4); // 使用实际的I2C地址
+
+// 超声波传感器
+MeUltrasonicSensor ultraSensor(PORT_3);
+MeDCMotor motorLeft(M1);
+MeDCMotor motorRight(M2);
+
+// RGB LED灯
+MeRGBLed led(PORT_1, 4); // 初始化RGB LED灯，指定数量为4
+
+// 运行时间限制
+const long runTime = 10000; // 10秒 = 10000毫秒
+long startTime;
+
+void setLEDColor(uint8_t red, uint8_t green, uint8_t blue) {
+  for(uint8_t t = 0; t < 4; t++) { // 遍历4个LED灯
+    led.setColorAt(t, red, green, blue); // 设置每个LED灯的颜色
+  }
+  led.show();
+}
+
+void setup() {
+  Serial.begin(9600);
+  Wire.begin();
+
+  // 初始化陀螺仪传感器
+  gyro.begin();
+  delay(2000); // 等待陀螺仪稳定
+
+  // 初始化LED灯
+  led.show();
+
+  // 记录开始时间
+  startTime = millis();
+}
+
+void loop() {
+  // 获取当前时间
+  unsigned long currentTime = millis();
+  
+  // 检查是否超过运行时间
+  //if (currentTime - startTime >= runTime) {
+    // 停止电机
+    //motorLeft.run(0);
+    //motorRight.run(0);
+    //Serial.println("程序结束");
+    //while (true); // 停止在此
+  //}
+
+  // 更新陀螺仪数据
+  gyro.update();
+  float pitch = gyro.getAngleY();
+  float roll = gyro.getAngleZ();
+
+  // 读取超声波传感器距离
+  long distance = ultraSensor.distanceCm();
+
+  // 初始速度设为基础速度
+  int speedLeft = baseSpeed;
+  int speedRight = baseSpeed;
+
+  // 根据距离调整速度和LED颜色
+  if (distance < stopDistance) {
+    // 距离小于5cm，停止
+    speedLeft = 0;
+    speedRight = 0;
+    setLEDColor(255, 0, 0); // 红色
+  } else if (distance <= targetDistance) {
+    // 距离在5cm和10cm之间，减速
+    speedLeft = minSpeed;
+    speedRight = minSpeed;
+    setLEDColor(255, 255, 0); // 黄色
+  } else if (distance <= maxDistance) {
+    // 距离在10cm和20cm之间，基础速度
+    speedLeft = baseSpeed;
+    speedRight = baseSpeed;
+    setLEDColor(0, 0, 255); // 蓝色
+  } else {
+    // 距离大于20cm，加速
+    speedLeft = maxSpeed;
+    speedRight = maxSpeed;
+    setLEDColor(0, 255, 0); // 绿色
+  }
+
+  // 根据陀螺仪传感器调整速度
+  if (pitch > 5 || roll > 5) {
+    // 上坡时
+    if (distance < stopDistance) {
+      speedLeft = 0;
+      speedRight = 0;
+    } else if (distance <= targetDistance) {
+      speedLeft = baseSpeed;
+      speedRight = baseSpeed;
+    } else if (distance <= maxDistance) {
+      speedLeft = baseSpeed;
+      speedRight = baseSpeed;
+    } else {
+      speedLeft = maxSpeed;
+      speedRight = maxSpeed;
+    }
+  } else if (pitch < -5 || roll < -5) {
+    // 下坡时
+    if (distance < stopDistance) {
+      speedLeft = 0;
+      speedRight = 0;
+    } else if (distance <= maxDistance) {
+      speedLeft = minSpeed;
+      speedRight = minSpeed;
+    } else {
+      speedLeft = baseSpeed;
+      speedRight = baseSpeed;
+    }
+  }
+
+  // 设置电机速度
+  motorLeft.run(-speedLeft); // 反转M1电机速度
+  motorRight.run(speedRight); // 保持M2电机速度
+
+  // 打印调试信息
+  Serial.print("Distance: ");
+  Serial.print(distance);
+  Serial.print(" cm, Speed L: ");
+  Serial.print(speedLeft);
+  Serial.print(", Speed R: ");
+  Serial.print(speedRight);
+  Serial.print(", Pitch: ");
+  Serial.print(pitch);
+  Serial.print(", Roll: ");
+  Serial.print(roll);
+  Serial.println(" C");
+
+  delay(100); // 延时100毫秒
+}
